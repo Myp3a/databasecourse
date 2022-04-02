@@ -544,7 +544,70 @@ GROUP BY EXTRACT(YEAR FROM st.date_of_birth)
 *Результат*  
 
 ## Для каждой буквы алфавита в имени найти максимальный и минимальный риск хобби.
-> В данном варианте ТЗ задание сложнореализуемое. Временно его опустим.  
+Для возврата риска для каждой возможной буквы в имени необходима функция.  
+Функция задается как...
+```SQL
+CREATE OR REPLACE FUNCTION name(type variable_name)
+RETURNS
+  return_type
+AS
+$$
+DECLARE
+  inner_function_variables type
+BEGIN
+  ...
+END
+$$
+LANGUAGE plpgsql;
+```
+Может возвращать значения, массивы или таблицы. Для возврата единичного значения используется `RETURN`, для возврата массива - `RETURNS SETOF ...` и `RETURN NEXT`.  
+После каждой строки обязательна точка с запятой.  
+Исполняем SQL-запрос, указанный ниже.  
+```SQL
+CREATE OR REPLACE FUNCTION risk_by_letters()
+RETURNS TABLE (
+  letter VARCHAR, 
+  maxrisk NUMERIC(4,2), 
+  minrisk NUMERIC(4,2)) 
+AS
+$$
+DECLARE 
+  ch TEXT;
+  tmp RECORD;
+BEGIN
+  FOREACH ch IN ARRAY regexp_split_to_array('абвгдеёжзийклмнопрстуфхцчшщъыьэюя', '')
+  LOOP
+    SELECT 
+      ch, 
+      MAX(h.risk) maxr, 
+      MIN(h.risk) minr 
+    INTO tmp
+    FROM students st
+    INNER JOIN student_hobby sth
+    ON sth.n_z = st.n_z
+    INNER JOIN hobby h
+    ON sth.id_hobby = h.id
+    GROUP BY
+      st.name ILIKE ('%' || ch || '%')
+    HAVING
+      st.name ILIKE ('%' || ch || '%');
+
+    IF tmp.ch IS NOT NULL 
+    THEN
+      letter = tmp.ch;
+      maxrisk = tmp.maxr;
+      minrisk = tmp.minr;
+      RETURN NEXT;
+    END IF;
+  END LOOP;
+END
+$$ LANGUAGE plpgsql;
+```
+```SQL
+SELECT * FROM risk_by_letters()
+```
+![Результат](multi_30.png)  
+*Результат*  
 
 ## Для каждого месяца из даты рождения вывести средний балл студентов, которые занимаются хобби с названием «Футбол»
 Исполняем SQL-запрос, указанный ниже.  
