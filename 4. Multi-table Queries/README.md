@@ -740,3 +740,81 @@ GROUP BY
 ```
 ![Результат](multi_40.png)  
 *Результат*  
+
+<details>
+<summary>Есть еще один извращенный способ (Не рекомендуется!)</summary>
+
+Здесь мы пользуемся анонимной функцией и двумя вспомогательными представлениями.  
+Анонимная функция задается как `DO $$ function_body $$ LANGUAGE plpqsql;`. Она может все то же самое, что обычная функция, кроме возврата данных - значение возврата всегда `NULL`.  
+Первое вспомогательное представление хранит в себе общую таблицу оценок для каждой группы.  
+![Первое представление](multi_40_t1.png)  
+*Первое представление*  
+На его основе создается строка для дальнейшего запроса, которая обеспечит доступ к данным, сохраненным в формате JSON:  
+```
+jdata->>'3602' "3602", jdata->>'1132' "1132", jdata->>'4242' "4242", jdata->>'2281' "2281", jdata->>'1337' "1337"
+```
+Затем, с помощью `FORMAT` мы динамически создаем запрос в базу данных, куда подставляем нашу строку. Подзапрос сейчас содержит данные в формате JSON для каждой группы, сгруппированные по оценке.  
+![Позапрос](multi_40_t2.png)  
+*Подзапрос*  
+Наконец, `FORMAT` запрашивает данные из этой таблицы, формируя строку требуемых колонок динамически (строка приведена выше). В строке находится ключ, который будет получен из колонки `jdata`.  
+При выполнении сформированного запроса с помощью `EXECUTE` создается искомое нами представление, которое мы получаем после выполнения функции.  
+![Результат](multi_40_rot.png)  
+*Результат*  
+
+```SQL
+DO
+$$
+DECLARE 
+  groups_line TEXT;
+BEGIN
+CREATE OR REPLACE TEMP VIEW score_groups AS
+SELECT *
+FROM
+  (SELECT 
+    st.group_num, 'five' val,
+    COUNT(st.score) FILTER (WHERE ROUND(st.score) = 5)
+  FROM students st
+  GROUP BY
+    st.group_num) a
+UNION
+  (SELECT 
+    st.group_num, 'four' val,
+    COUNT(st.score) FILTER (WHERE ROUND(st.score) = 4)
+  FROM students st
+  GROUP BY
+    st.group_num)
+UNION
+  (SELECT 
+    st.group_num, 'three' val,
+    COUNT(st.score) FILTER (WHERE ROUND(st.score) = 3)
+  FROM students st
+  GROUP BY
+    st.group_num)
+UNION
+  (SELECT 
+    st.group_num, 'two' val,
+    COUNT(st.score) FILTER (WHERE ROUND(st.score) = 2)
+  FROM students st
+  GROUP BY
+    st.group_num);
+    
+SELECT string_agg(format('jdata->>%1$L "%1$s"', group_num), ', ') INTO groups_line
+FROM (
+   SELECT DISTINCT group_num
+      FROM score_groups ) sub;
+
+EXECUTE format($f$
+  CREATE OR REPLACE TEMP VIEW tempview AS
+SELECT val, %s
+        FROM (
+            SELECT val, json_object_agg(group_num, count) jdata
+            FROM score_groups
+GROUP BY 1
+            ORDER BY 1
+            ) sub
+				$f$, groups_line);
+END
+$$ LANGUAGE plpgsql;
+SELECT * FROM tempview
+```
+</details>
