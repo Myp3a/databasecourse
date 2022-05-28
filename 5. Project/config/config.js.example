@@ -1,0 +1,12 @@
+const mysql = require('mysql')
+
+var pool = mysql.createPool({
+    connectionLimit: 1000,
+    host: 'example.ru',
+    port: 3306,
+    user: 'your_username',
+    password: 'your_password',
+    database: 'yor_database'
+})
+
+module.exports = pool
