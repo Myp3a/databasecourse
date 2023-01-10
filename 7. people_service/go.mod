@@ -1,4 +1,4 @@
-module github.com/RyabovNick/databasecourse_2/golang/tasks/people_service
+module "github.com/Myp3a/databasecourse/7. people_service"
 
 go 1.19
 
